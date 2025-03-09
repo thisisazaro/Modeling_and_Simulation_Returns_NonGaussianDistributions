@@ -1,10 +1,19 @@
 # Abstract
-This study analyzes the time series representing the total export volume from Russia in billion USD from 1994 to 2021. The research involves data visualization, stationarity testing, data transformation, and forecasting using various models, including ETS, SARIMA, Theta method, and Random Forest. The models are compared to determine the most accurate one, residuals are analyzed, and a two-year forecast is generated. Additionally, the study examines anomalies and structural shifts in the data.
 
-# Research Questions
-- Is the export time series stationary?
-- What data transformation (if any) improves forecasting accuracy?
-- Which models provide the most accurate export predictions?
-- Does combining multiple models improve forecast accuracy compared to individual models?
-- What are the main anomalies or structural changes in export data?
-- What is the forecast for the next two years based on historical trends?
+It is well known that the probability distribution of high-frequency ﬁnancial 
+returns is characterized by a leptokurtic, heavy-tailed shape. This behavior 
+undermines the typical assumption of Gaussian log-returns behind the standard 
+approach to risk management and option pricing. Yet, there is no consensus on what 
+class of probability distributions should be adopted to describe ﬁnancial returns 
+and diﬀerent models used in the literature have demonstrated, to varying extent, 
+an ability to reproduce empirically observed stylized facts. In order to provide 
+some clarity, in this paper we perform a thorough study of the most popular models 
+of return distributions as obtained in the empirical analyses of high-frequency ﬁnancial data. 
+We compare the statistical properties and simulate the dynamics of non-Gaussian 
+ﬁnancial ﬂuctuations by means of Monte Carlo sampling from the diﬀerent models 
+in terms of realistic tail exponents. Our ﬁndings show a noticeable consistency 
+between the considered return distributions in the modeling of the scaling properties 
+of large price changes. We also discuss the convergence rate to the asymptotic 
+distributions of the nonGaussian stochastic processes and we study, as a ﬁrst 
+example of possible applications, the impact of our results on option pricing 
+in comparison with the standard Black and Scholes approach.
