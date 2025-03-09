@@ -4,6 +4,7 @@
 
 library(readxl)
 library(dplyr)
+
 library(lubridate)
 library(tidyr)
 library(forecast)
@@ -12,68 +13,11 @@ library(corrplot)
 library(ggplot2)
 library(psych)
 library(tseries)
-
-
-cpi <- read_excel("CPI.xlsx")
-industrial_production <- read_excel("Industrial_Production.xlsx")
-interest_rate <- read_excel("Interest_Rate.xlsx")
-spy_returns <- read_excel("SPY_Returns.xlsx")
-unemployment <- read_excel("Unemployment.xlsx")
-vix <- read_excel("VIX.xlsx")
-
-str(cpi)
-str(industrial_production)
-str(interest_rate)
-str(spy_returns)
-str(unemployment)
-str(vix)
-
-
-
-
-# Преобразование даты в формат "год-месяц" для месячных данных
-cpi <- cpi %>% mutate(date = floor_date(date, "month"))
-industrial_production <- industrial_production %>% mutate(date = floor_date(date, "month"))
-unemployment <- unemployment %>% mutate(date = floor_date(date, "month"))
-
-# Агрегация дневных данных до месячного уровня (берем среднее значение за месяц)
-interest_rate <- interest_rate %>%
-        mutate(date = floor_date(date, "month")) %>%
-        group_by(date) %>%
-        summarise(Interest_Rate = mean(Interest_Rate, na.rm = TRUE))
-
-spy_returns <- spy_returns %>%
-        mutate(date = floor_date(date, "month")) %>%
-        group_by(date) %>%
-        summarise(SPY_Returns = mean(daily.returns, na.rm = TRUE))
-
-vix <- vix %>%
-        mutate(date = floor_date(date, "month")) %>%
-        group_by(date) %>%
-        summarise(VIX = mean(VIX.Close, na.rm = TRUE))
-
-# Объединение всех данных в один набор
-dataset_full <- cpi %>%
-        left_join(industrial_production, by = "date") %>%
-        left_join(unemployment, by = "date") %>%
-        left_join(interest_rate, by = "date") %>%
-        left_join(spy_returns, by = "date") %>%
-        left_join(vix, by = "date")
-
-dataset_full <- dataset_full %>%
-        fill(everything(), .direction = "up") %>%   # Сначала заполняем NA следующими значениями (backward fill)
-        fill(everything(), .direction = "down")     # Затем заполняем оставшиеся NA предыдущими значениями (forward fill)
-
-
-str(dataset_full)
-head(dataset_full)
-
-#library(writexl)
-#write_xlsx(dataset_full, "dataset_full.xlsx")
+library(kableExtra)
 
 ################################################################################
 
-data <- read_excel("dataset_full.xlsx")
+data <- read_excel("data/USA_macro_dataset.xlsx")
 
 # 1.⁠ ⁠Data Preparation 
 
@@ -90,7 +34,7 @@ kable(summary_psych)
 
 cor_matrix <- cor(data %>% select(-date), use = "complete.obs")
 cor_matrix
-library(kableExtra)
+
 kable(cor_matrix)
 corrplot(cor_matrix, method = "color", type = "lower", tl.col = "black", 
          tl.srt = 45, addCoef.col = "black", number.cex = 0.8)
@@ -199,6 +143,115 @@ for (i in 1:ncol(residuals_var)) {
         hist(residuals_var[, i], main = paste("Residuals of", colnames(residuals_var)[i]), 
              xlab = "", col = "lightblue", breaks = 20)
 }
+
+########################### VAR RSTAN ##########################################
+library(tidyverse)
+library(rstan)
+
+str(var_data)  # Должно быть: num [1:299, 1:6]
+
+var_data_matrix <- as.matrix(var_data, rownames.force = NA)
+dim(var_data_matrix)  # Должно быть (299, 6)
+
+# Подготовка данных для RStan
+stan_data <- list(
+        T = nrow(var_data_matrix),
+        K = ncol(var_data_matrix),
+        P = 3,  
+        Y = var_data_matrix
+)
+stan_data$Sigma <- diag(1, K)
+
+
+# Компиляция модели (укажите путь к файлу `var_model.stan`)
+stan_model <- stan_model(file = "R/var_model.stan")
+
+# Запуск выборки
+fit <- sampling(stan_model, data = stan_data, iter = 2000, chains = 4, cores = 4, 
+                control = list(adapt_delta = 0.9, max_treedepth = 12))
+
+fit <- optimizing(stan_model, data = stan_data, iter = 2000)
+fit <- optimizing(stan_model, data = stan_data, iter = 2000, algorithm = "LBFGS", verbose = TRUE)
+
+# Вывод результатов
+print(fit)
+# Вывести параметры
+print(fit$par)
+
+
+# Сохраняем скомпилированную модель
+# saveRDS(stan_model, file = "stan_model_compiled.rds")
+# При следующих запусках загружаем готовую модель (ускоряет старт!)
+# stan_model <- readRDS("stan_model_compiled.rds")
+# Запуск выборки
+# fit <- sampling(stan_model, data = stan_data, iter = 2000, chains = 4, cores = 4)
+
+
+########################## СРАВНЕНИЕ VAR 
+
+# Количество переменных и лагов
+K <- ncol(var_data)  # Число переменных
+P <- 3  # Лаги
+
+# Преобразуем B_map (из Stan) в правильную матрицу
+B_map_matrix <- matrix(fit$par[grep("B", names(fit$par))], nrow = K, byrow = TRUE)
+
+# Проверяем размерность (должно быть K x (K * P))
+dim(B_map_matrix)
+
+# Извлекаем коэффициенты VAR
+# Извлекаем коэффициенты VAR
+B_vars <- coef(var_model)
+
+# Преобразуем в удобную таблицу
+B_vars_df <- as.data.frame(do.call(rbind, lapply(B_vars, function(x) x[, "Estimate"])))
+
+# Преобразуем в числовую матрицу
+B_vars_matrix <- as.matrix(B_vars_df)
+
+# Удаляем столбец const, если он есть
+if ("const" %in% colnames(B_vars_matrix)) {
+        B_vars_matrix <- B_vars_matrix[, colnames(B_vars_matrix) != "const"]
+}
+
+# Проверяем размерность (должно быть K x (K * P))
+dim(B_vars_matrix)
+
+# Разница между коэффициентами (Stan - vars)
+diff_B <- B_map_matrix - B_vars_matrix
+
+# Выводим матрицу разницы
+print("Разница между коэффициентами VAR (Stan - vars):")
+print(diff_B)
+
+library(ggplot2)
+dev.off()  # Закрывает текущий графический девайс
+
+# Создаём DataFrame для визуализации
+compare_df <- data.frame(
+        Variable = rep(colnames(var_data), each = K * P),
+        Lagged_Variable = rep(colnames(var_data), times = K * P),
+        Stan_Estimate = as.vector(B_map_matrix),
+        Vars_Estimate = as.vector(B_vars_matrix),
+        Difference = as.vector(diff_B)
+)
+compare_df
+
+#library(writexl)
+#write_xlsx(compare_df, "compare_df.xlsx")
+ggplot(compare_df, aes(x = Vars_Estimate, y = Stan_Estimate)) +
+        geom_point(color = "blue") +
+        geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+        labs(title = "Сравнение коэффициентов VAR (Stan vs vars)",
+             x = "VAR (package vars)", y = "Stan (BayesVAR)")
+
+ggplot(compare_df, aes(x = Vars_Estimate, y = Stan_Estimate)) +
+        geom_point(color = "blue") +
+        geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+        labs(title = "Comparison of VAR Coefficients (Stan vs vars)",
+             x = "VAR Coefficients (vars package)", 
+             y = "VAR Coefficients (VAR in Stan)") +
+        theme_minimal()
 
 ############## PART III. Fit Non-Gaussian Error Distributions ##################
 
