@@ -1,4 +1,25 @@
-.Rproj.user
+
+# Игнорируем временные файлы R и RStudio
 .Rhistory
 .RData
+.Rproj.user
 .Ruserdata
+.Rbuildignore
+.Rout
+.Rout.save
+.Rproj
+
+# Игнорируем временные файлы и логи
+*.log
+*.tmp
+*.swp
+*.bak
+*.DS_Store  # Для macOS
+
+# Игнорируем папку с установленными пакетами (если такая есть)
+inst/
+
+# Игнорируем файлы кеша и временные директории
+__pycache__/
+venv/
+.cache/
